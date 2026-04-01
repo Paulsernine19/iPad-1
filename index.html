@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Patient Findings Dashboard</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" />
+
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+
+    .material-symbols-outlined{
+      font-variation-settings:"FILL" 0,"wght" 400,"GRAD" 0,"opsz" 24;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      line-height:1;
+    }
+
+    .drag-item{
+      touch-action:none;
+      user-select:none;
+      -webkit-user-select:none;
+      cursor:grab;
+    }
+    .drag-item:active{ cursor:grabbing; }
+
+    .eye-stage{
+      background:
+        radial-gradient(circle at 50% 0%, rgba(255,255,255,.45), transparent 30%),
+        linear-gradient(180deg,#edf4fb 0%,#dbe7f3 100%);
+    }
+
+    .flashlight-glow{
+      pointer-events:none;
+      mix-blend-mode:screen;
+    }
+
+    .soft-chip{
+      background: rgba(17,115,212,.08);
+      color:#1173d4;
+      border:1px solid rgba(17,115,212,.15);
+    }
+
+    .dashboard-media{
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #e5e7eb;
+    }
+
+    .dashboard-media .bg{
+      position:absolute;
+      inset:0;
+      width:100%;
+      height:100%;
+      object-fit:cover;
+      filter: blur(16px);
+      transform: scale(1.08);
+      opacity:.3;
+    }
+
+    .dashboard-media .main{
+      position:relative;
+      z-index:1;
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      object-position:center;
+      display:block;
+    }
+
+    .detail-image-wrap{
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #f1f5f9;
+    }
+
+    .detail-image-wrap .detail-bg{
+      position:absolute;
+      inset:0;
+      background-position:center center;
+      background-size:cover;
+      background-repeat:no-repeat;
+      filter: blur(18px);
+      transform: scale(1.08);
+      opacity:.28;
+    }
+
+    .detail-image-wrap .detail-main{
+      position:absolute;
+      inset:0;
+      background-position:center center;
+      background-size:contain;
+      background-repeat:no-repeat;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-900">
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" class="min-h-screen flex flex-col">
+    <header class="bg-white border-b px-6 py-4 flex items-center gap-4 relative">
+      <img
+        id="avatar"
+        class="w-12 h-12 rounded-full cursor-pointer border border-slate-200"
+        src="https://placehold.co/80x80/png?text=A"
+        alt="Patient avatar"
+      />
+
+      <div>
+        <h1 id="patientTitle" class="text-xl font-bold">Patient A Findings</h1>
+        <p class="text-sm text-slate-500">Paramedic Training Session</p>
+      </div>
+
+      <div
+        id="patientMenu"
+        class="hidden absolute top-[72px] left-6 bg-white border rounded-xl shadow-md w-44 z-50 overflow-hidden"
+      ></div>
+    </header>
+
+    <main class="flex-1 max-w-6xl mx-auto w-full p-6">
+      <div id="cardsGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+    </main>
+  </div>
+
+  <!-- DETAIL PAGE -->
+  <div id="detail" class="hidden min-h-screen flex flex-col">
+    <header class="bg-white border-b px-6 py-4 flex justify-between items-center">
+      <h2 class="font-bold text-lg">Ocular Evaluation</h2>
+      <button id="backBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Back</button>
+    </header>
+
+    <main class="max-w-5xl mx-auto w-full p-6">
+      <h1 id="examTitle" class="text-3xl font-bold mb-3"></h1>
+      <p id="examHint" class="text-slate-500 mb-6"></p>
+
+      <div class="rounded-xl overflow-hidden border shadow-sm bg-white">
+        <div id="interactiveStage" class="aspect-video w-full"></div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const BLURRED_VISION_IMAGE = "https://i.ibb.co/Jjwhrg24/ba8b873b-e732-4950-85a6-e5713a99384a.png";
+    const NORMAL_VISION_IMAGE  = "images/nlevision.png";
+    const DIPLOPIA_FIELD_IMAGE = "images/diplopia.png";
+    const NORMAL_VISUAL_FIELD_IMAGE = "images/nlevision.png";
+    const LEFT_HEMIANOPIA_IMAGE = "images/lefthemianopia.png";
+    const GAZE_CARD_IMAGE = "images/gaze.png";
+    const PUPIL_CARD_IMAGE = "images/pupils.png";
+    const VISUAL_FIELD_CARD_IMAGE = "images/visualfield.png";
+    const VISION_CARD_IMAGE = "images/nlevision.png";
+
+    function getVisionImageForPatient(letter) {
+      return ["C", "D", "F"].includes(letter) ? BLURRED_VISION_IMAGE : NORMAL_VISION_IMAGE;
+    }
+
+    function getVisualFieldImageForPatient(letter) {
+      if (letter === "A") return NORMAL_VISUAL_FIELD_IMAGE;
+      if (letter === "B") return LEFT_HEMIANOPIA_IMAGE;
+      return NORMAL_VISUAL_FIELD_IMAGE;
+    }
+
+    function getGazeProfile(letter) {
+      const profiles = {
+        A: "normal",
+        B: "right_fixed",
+        C: "normal",
+        D: "left_partial",
+        E: "normal",
+        F: "left_snapback"
+      };
+      return profiles[letter] || "normal";
+    }
+
+    function createPatient(letter) {
+      return {
+        name: `Patient ${letter}`,
+        avatar: `https://placehold.co/80x80/png?text=${letter}`,
+        cards: [
+          {
+            id: "gaze",
+            title: "Gaze Examination",
+            summary: "Assess ability to follow moving object.",
+            hint: "Drag the finger target and observe how the eyes behave for this patient.",
+            image: GAZE_CARD_IMAGE,
+            gazeProfile: getGazeProfile(letter)
+          },
+          {
+            id: "pupil",
+            title: "Pupil Light Response",
+            summary: "Assess pupil reaction to light.",
+            hint: "Move the flashlight over the eyes and observe the pupil reaction.",
+            image: PUPIL_CARD_IMAGE
+          },
+          {
+            id: "field",
+            title: "Visual Field",
+            summary: "Assess peripheral visual fields.",
+            hint: "Observe the visual field image shown for this patient.",
+            image: getVisualFieldImageForPatient(letter),
+            cardImage: VISUAL_FIELD_CARD_IMAGE
+          },
+          {
+            id: "vision",
+            title: "Vision",
+            summary: "Assess clarity of vision.",
+            hint: "Observe what the patient sees.",
+            image: getVisionImageForPatient(letter),
+            cardImage: VISION_CARD_IMAGE
+          }
+        ]
+      };
+    }
+
+    let patients = {
+      A: createPatient("A"),
+      B: createPatient("B")
+    };
+
+    let currentPatient = "A";
+
+    const grid = document.getElementById("cardsGrid");
+    const patientMenu = document.getElementById("patientMenu");
+    const interactiveStage = document.getElementById("interactiveStage");
+    const examHint = document.getElementById("examHint");
+
+    function renderCards() {
+      grid.innerHTML = "";
+
+      patients[currentPatient].cards.forEach(card => {
+        const previewImage = card.cardImage || card.image;
+        grid.innerHTML += `
+          <div class="bg-white border rounded-xl overflow-hidden shadow-sm cursor-pointer card" data-id="${card.id}">
+            <div class="aspect-video bg-slate-200 overflow-hidden">
+              <div class="dashboard-media">
+                <img src="${previewImage}" alt="${card.title}" class="bg" onerror="this.style.display='none'">
+                <img src="${previewImage}" alt="${card.title}" class="main" onerror="this.src='https://placehold.co/1200x675/png?text=Image+Not+Loading'">
+              </div>
+            </div>
+
+            <div class="p-4 flex flex-col gap-4">
+              <div>
+                <h3 class="font-bold text-lg">${card.title}</h3>
+                <p class="text-sm text-slate-500">${card.summary}</p>
+              </div>
+
+              <div class="flex justify-end border-t pt-3">
+                <span class="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm font-bold transition">
+                  Reveal Details
+                  <span class="material-symbols-outlined text-sm">open_in_full</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      document.querySelectorAll(".card").forEach(el => {
+        el.onclick = () => openDetail(el.dataset.id);
+      });
+    }
+
+    function getGazeStageHTML() {
+      return `
+      <div class="eye-stage relative w-full h-full flex items-center justify-center">
+
+        <div class="absolute top-4 left-4 soft-chip rounded-full px-3 py-1 text-sm font-medium z-20">
+          Drag the finger target
+        </div>
+
+        <div id="gazeTarget"
+          class="drag-item absolute z-30 w-16 h-16 rounded-full bg-amber-300 border-4 border-white shadow-lg flex items-center justify-center"
+          style="left:75%;top:30%;">
+          <span class="material-symbols-outlined text-slate-800 text-3xl">touch_app</span>
+        </div>
+
+        <svg viewBox="0 0 1200 675" class="w-full h-full">
+
+          <!-- LEFT EYE -->
+          <circle cx="420" cy="340" r="120" fill="white" stroke="#d1d5db" stroke-width="6"/>
+
+          <g id="leftEyeGroup" transform="translate(420 340)">
+            <circle r="56" fill="#6fb7d6"/>
+            <circle r="18" fill="#111827"/>
+            <circle cx="18" cy="-18" r="10" fill="white" opacity="0.95"/>
+          </g>
+
+          <!-- RIGHT EYE -->
+          <circle cx="780" cy="340" r="120" fill="white" stroke="#d1d5db" stroke-width="6"/>
+
+          <g id="rightEyeGroup" transform="translate(780 340)">
+            <circle r="56" fill="#6fb7d6"/>
+            <circle r="18" fill="#111827"/>
+            <circle cx="18" cy="-18" r="10" fill="white" opacity="0.95"/>
+          </g>
+
+        </svg>
+
+      </div>
+      `;
+    }
+
+    function getPupilStageHTML() {
+      return `
+        <div class="eye-stage relative w-full h-full overflow-hidden">
+          <div class="absolute top-4 left-4 soft-chip rounded-full px-3 py-1 text-sm font-medium z-20">
+            Drag the flashlight over the eyes
+          </div>
+
+          <div id="flashlight"
+            class="drag-item absolute z-30 w-24 h-24 rounded-2xl bg-slate-800 shadow-xl flex items-center justify-center"
+            style="left: 76%; top: 18%;">
+            <span class="material-symbols-outlined text-yellow-300 text-4xl">flashlight_on</span>
+          </div>
+
+          <div id="flashGlow"
+            class="flashlight-glow absolute z-20 w-52 h-52 rounded-full bg-yellow-200 opacity-0 blur-2xl"
+            style="left: 74%; top: 16%;"></div>
+
+          <svg viewBox="0 0 1200 675" class="w-full h-full">
+            <defs>
+              <radialGradient id="scleraShade2" cx="50%" cy="45%" r="65%">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="100%" stop-color="#e5e7eb"/>
+              </radialGradient>
+              <radialGradient id="irisBrown" cx="42%" cy="38%" r="65%">
+                <stop offset="0%" stop-color="#d3a36f"/>
+                <stop offset="55%" stop-color="#8a5e34"/>
+                <stop offset="100%" stop-color="#5b3920"/>
+              </radialGradient>
+              <radialGradient id="skinTone2" cx="50%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#f8dbc8"/>
+                <stop offset="100%" stop-color="#d8ae91"/>
+              </radialGradient>
+            </defs>
+
+            <ellipse cx="600" cy="338" rx="420" ry="230" fill="url(#skinTone2)" opacity="0.68"/>
+
+            <path d="M320 215 Q430 150 520 210" fill="none" stroke="#6b4c3b" stroke-width="18" stroke-linecap="round"/>
+            <path d="M680 210 Q770 150 880 215" fill="none" stroke="#6b4c3b" stroke-width="18" stroke-linecap="round"/>
+
+            <path d="M250 330 Q390 220 530 330 Q390 420 250 330 Z" fill="url(#scleraShade2)" stroke="#cbd5e1" stroke-width="6"/>
+            <path d="M670 330 Q810 220 950 330 Q810 420 670 330 Z" fill="url(#scleraShade2)" stroke="#cbd5e1" stroke-width="6"/>
+
+            <g id="leftPupilGroup" transform="translate(390 330)">
+              <circle r="66" fill="url(#irisBrown)"/>
+              <circle id="leftReactivePupil" r="28" fill="#111827"/>
+              <circle cx="18" cy="-18" r="10" fill="white" opacity="0.95"/>
+            </g>
+
+            <g id="rightPupilGroup" transform="translate(810 330)">
+              <circle r="66" fill="url(#irisBrown)"/>
+              <circle id="rightReactivePupil" r="28" fill="#111827"/>
+              <circle cx="18" cy="-18" r="10" fill="white" opacity="0.95"/>
+            </g>
+
+            <path d="M250 330 Q390 220 530 330" fill="none" stroke="#b98970" stroke-width="10"/>
+            <path d="M670 330 Q810 220 950 330" fill="none" stroke="#b98970" stroke-width="10"/>
+            <path d="M250 330 Q390 420 530 330" fill="none" stroke="#b98970" stroke-width="8"/>
+            <path d="M670 330 Q810 420 950 330" fill="none" stroke="#b98970" stroke-width="8"/>
+          </svg>
+        </div>
+      `;
+    }
+
+    function getImageStageHTML(title, imageUrl, label) {
+      return `
+        <div class="w-full h-full bg-slate-100 p-5">
+          <div class="w-full h-full rounded-2xl overflow-hidden bg-white shadow-lg border border-slate-200 flex flex-col">
+            <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+              <h3 class="text-xl font-bold text-slate-900">${title}</h3>
+              <span class="text-sm text-blue-600 font-semibold">${label}</span>
+            </div>
+
+            <div class="flex-1 min-h-0">
+              <div class="detail-image-wrap w-full h-full">
+                <div class="detail-bg" style="background-image:url('${imageUrl}')"></div>
+                <div class="detail-main" style="background-image:url('${imageUrl}')"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function enableDrag(element, onMove) {
+      let active = false;
+      let offsetX = 0;
+      let offsetY = 0;
+      const parent = element.parentElement;
+
+      function pointerDown(e) {
+        active = true;
+        const rect = element.getBoundingClientRect();
+        offsetX = e.clientX - rect.left;
+        offsetY = e.clientY - rect.top;
+        element.setPointerCapture?.(e.pointerId);
+      }
+
+      function pointerMove(e) {
+        if (!active) return;
+
+        const parentRect = parent.getBoundingClientRect();
+        const elRect = element.getBoundingClientRect();
+
+        let left = e.clientX - parentRect.left - offsetX;
+        let top = e.clientY - parentRect.top - offsetY;
+
+        left = Math.max(0, Math.min(left, parentRect.width - elRect.width));
+        top = Math.max(0, Math.min(top, parentRect.height - elRect.height));
+
+        element.style.left = `${(left / parentRect.width) * 100}%`;
+        element.style.top = `${(top / parentRect.height) * 100}%`;
+
+        onMove(left + elRect.width / 2, top + elRect.height / 2, parentRect);
+      }
+
+      function pointerUp() { active = false; }
+
+      element.addEventListener("pointerdown", pointerDown);
+      window.addEventListener("pointermove", pointerMove);
+      window.addEventListener("pointerup", pointerUp);
+    }
+
+    function initGazeInteraction(profile) {
+      const target = document.getElementById("gazeTarget");
+      const leftEye = document.getElementById("leftEyeGroup");
+      const rightEye = document.getElementById("rightEyeGroup");
+
+      const leftCenter = { x: 420, y: 340 };
+      const rightCenter = { x: 780, y: 340 };
+      const maxMove = 48;
+
+      function setEyePositions(nx, ny) {
+        let outX = 0;
+        let outY = (ny - 0.5) * maxMove * 1.2;
+
+        switch (profile) {
+          case "normal":
+            outX = (nx - 0.5) * maxMove * 2.2;
+            break;
+
+          case "left_partial":
+            if (nx <= 0.5) {
+              const t = nx / 0.5;
+              outX = -maxMove + (maxMove * t);
+            } else {
+              outX = 0;
+            }
+            break;
+
+          case "right_fixed":
+            outX = maxMove;
+            outY = 0;
+            break;
+
+          case "left_snapback":
+            if (nx < 0.52) {
+              const t = nx / 0.52;
+              outX = -maxMove + (maxMove * t);
+            } else {
+              outX = -maxMove;
+            }
+            break;
+
+          default:
+            outX = (nx - 0.5) * maxMove * 2.2;
+        }
+
+        leftEye.setAttribute("transform", `translate(${leftCenter.x + outX} ${leftCenter.y + outY})`);
+        rightEye.setAttribute("transform", `translate(${rightCenter.x + outX} ${rightCenter.y + outY})`);
+      }
+
+      if (profile === "left_partial" || profile === "left_snapback") {
+        setEyePositions(0, 0.5);
+      } else if (profile === "right_fixed") {
+        setEyePositions(1, 0.5);
+      } else {
+        setEyePositions(0.78, 0.3);
+      }
+
+      enableDrag(target, (x, y, rect) => {
+        const nx = x / rect.width;
+        const ny = y / rect.height;
+        setEyePositions(nx, ny);
+      });
+    }
+
+    function initPupilInteraction() {
+      const flashlight = document.getElementById("flashlight");
+      const flashGlow = document.getElementById("flashGlow");
+      const leftPupil = document.getElementById("leftReactivePupil");
+      const rightPupil = document.getElementById("rightReactivePupil");
+
+      let currentLeftR = parseFloat(leftPupil.getAttribute("r")) || 28;
+      let currentRightR = parseFloat(rightPupil.getAttribute("r")) || 28;
+      let pupilAnimFrame = null;
+
+      function setPupilRadius(leftR, rightR) {
+        currentLeftR = leftR;
+        currentRightR = rightR;
+        leftPupil.setAttribute("r", leftR.toFixed(1));
+        rightPupil.setAttribute("r", rightR.toFixed(1));
+      }
+
+      function animatePupilRadius(leftTarget, rightTarget, durationMs) {
+        if (pupilAnimFrame) cancelAnimationFrame(pupilAnimFrame);
+
+        const startLeft = currentLeftR;
+        const startRight = currentRightR;
+        const start = performance.now();
+
+        function step(now) {
+          const progress = Math.min(1, (now - start) / durationMs);
+          const eased = 1 - Math.pow(1 - progress, 3);
+
+          const nextLeft = startLeft + (leftTarget - startLeft) * eased;
+          const nextRight = startRight + (rightTarget - startRight) * eased;
+
+          setPupilRadius(nextLeft, nextRight);
+
+          if (progress < 1) {
+            pupilAnimFrame = requestAnimationFrame(step);
+          } else {
+            pupilAnimFrame = null;
+          }
+        }
+
+        pupilAnimFrame = requestAnimationFrame(step);
+      }
+
+      const leftEye = { x: 390, y: 330 };
+      const rightEye = { x: 810, y: 330 };
+
+      function updatePupils(x, y, rect) {
+        const sx = (x / rect.width) * 1200;
+        const sy = (y / rect.height) * 675;
+
+        const dLeft = Math.hypot(sx - leftEye.x, sy - leftEye.y);
+        const dRight = Math.hypot(sx - rightEye.x, sy - rightEye.y);
+
+        const leftNear = Math.max(0, 1 - dLeft / 380);
+        const rightNear = Math.max(0, 1 - dRight / 380);
+
+        if (currentPatient === "B") {
+          const mmScale = 6;
+          const leftBase = 3 * mmScale;
+          const rightBase = 5 * mmScale;
+
+          // Patient B: anisocoria (R > L) with sluggish 2-second constriction.
+          const leftTarget = Math.max(2 * mmScale, leftBase - (leftNear * 7 + rightNear * 4));
+          const rightTarget = Math.max(4 * mmScale, rightBase - (rightNear * 7 + leftNear * 4));
+
+          animatePupilRadius(leftTarget, rightTarget, 2000);
+        } else {
+          // Patient A: normal direct and consensual response in both pupils.
+          const leftRadius = 28 - (leftNear * 13 + rightNear * 10);
+          const rightRadius = 28 - (rightNear * 13 + leftNear * 10);
+
+          setPupilRadius(Math.max(8, leftRadius), Math.max(8, rightRadius));
+        }
+
+        const nearest = Math.max(leftNear, rightNear);
+        flashGlow.style.opacity = String(0.18 + nearest * 0.62);
+        flashGlow.style.left = flashlight.style.left;
+        flashGlow.style.top = flashlight.style.top;
+      }
+
+      const rect = interactiveStage.getBoundingClientRect();
+      updatePupils(rect.width * 0.76, rect.height * 0.18, rect);
+
+      enableDrag(flashlight, (x, y, parentRect) => {
+        updatePupils(x, y, parentRect);
+      });
+    }
+
+    function renderInteractiveStage(card) {
+      if (card.id === "gaze") {
+        interactiveStage.innerHTML = getGazeStageHTML();
+        requestAnimationFrame(() => initGazeInteraction(card.gazeProfile || "normal"));
+        return;
+      }
+
+      if (card.id === "pupil") {
+        interactiveStage.innerHTML = getPupilStageHTML();
+        requestAnimationFrame(initPupilInteraction);
+        return;
+      }
+
+      if (card.id === "field") {
+        interactiveStage.innerHTML = getImageStageHTML(card.title, card.image, "Visual Field Assessment");
+        return;
+      }
+
+      if (card.id === "vision") {
+        interactiveStage.innerHTML = getImageStageHTML(card.title, card.image, "What the patient sees");
+        return;
+      }
+
+      interactiveStage.innerHTML = "";
+    }
+
+    function openDetail(id) {
+      const patient = patients[currentPatient];
+      const card = patient.cards.find(c => c.id === id);
+
+      document.getElementById("examTitle").textContent = card.title;
+      examHint.textContent = card.hint || "";
+      renderInteractiveStage(card);
+
+      document.getElementById("dashboard").classList.add("hidden");
+      document.getElementById("detail").classList.remove("hidden");
+    }
+
+    document.getElementById("backBtn").onclick = () => {
+      document.getElementById("detail").classList.add("hidden");
+      document.getElementById("dashboard").classList.remove("hidden");
+    };
+
+    function buildPatientMenu() {
+      patientMenu.innerHTML = "";
+
+      Object.keys(patients).forEach(key => {
+        patientMenu.innerHTML += `
+          <div class="px-4 py-3 hover:bg-slate-50 cursor-pointer patientItem" data-id="${key}">
+            Patient ${key}
+          </div>
+        `;
+      });
+
+      document.querySelectorAll(".patientItem").forEach(el => {
+        el.onclick = () => {
+          currentPatient = el.dataset.id;
+          document.getElementById("patientTitle").textContent = `Patient ${currentPatient} Findings`;
+          document.getElementById("avatar").src = patients[currentPatient].avatar;
+          patientMenu.classList.add("hidden");
+          renderCards();
+        };
+      });
+    }
+
+    document.getElementById("avatar").onclick = (e) => {
+      e.stopPropagation();
+      patientMenu.classList.toggle("hidden");
+    };
+
+    document.addEventListener("click", (e) => {
+      if (!patientMenu.contains(e.target) && e.target.id !== "avatar") {
+        patientMenu.classList.add("hidden");
+      }
+    });
+
+    buildPatientMenu();
+    renderCards();
+  </script>
+</body>
+</html>
