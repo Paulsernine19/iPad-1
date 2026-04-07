@@ -22,8 +22,8 @@
 
     .drag-item{
       touch-action:none;
-      user-select:none;
       -webkit-user-select:none;
+      user-select:none;
       cursor:grab;
     }
     .drag-item:active{ cursor:grabbing; }
@@ -149,19 +149,12 @@
   </div>
 
   <script>
-    const BLURRED_VISION_IMAGE = "https://i.ibb.co/Jjwhrg24/ba8b873b-e732-4950-85a6-e5713a99384a.png";
-    const NORMAL_VISION_IMAGE  = "images/nlevision.png";
     const DIPLOPIA_FIELD_IMAGE = "images/diplopia.png";
     const NORMAL_VISUAL_FIELD_IMAGE = "images/nlevision.png";
     const LEFT_HEMIANOPIA_IMAGE = "images/lefthemianopia.png";
     const GAZE_CARD_IMAGE = "images/gaze.png";
     const PUPIL_CARD_IMAGE = "images/pupils.png";
     const VISUAL_FIELD_CARD_IMAGE = "images/visualfield.png";
-    const VISION_CARD_IMAGE = "images/nlevision.png";
-
-    function getVisionImageForPatient(letter) {
-      return ["C", "D", "F"].includes(letter) ? BLURRED_VISION_IMAGE : NORMAL_VISION_IMAGE;
-    }
 
     function getVisualFieldImageForPatient(letter) {
       if (letter === "A") return NORMAL_VISUAL_FIELD_IMAGE;
@@ -172,7 +165,7 @@
     function getGazeProfile(letter) {
       const profiles = {
         A: "normal",
-        B: "right_fixed",
+        B: "left_fixed",
         C: "normal",
         D: "left_partial",
         E: "normal",
@@ -208,14 +201,6 @@
             hint: "Observe the visual field image shown for this patient.",
             image: getVisualFieldImageForPatient(letter),
             cardImage: VISUAL_FIELD_CARD_IMAGE
-          },
-          {
-            id: "vision",
-            title: "Vision",
-            summary: "Assess clarity of vision.",
-            hint: "Observe what the patient sees.",
-            image: getVisionImageForPatient(letter),
-            cardImage: VISION_CARD_IMAGE
           }
         ]
       };
@@ -463,6 +448,11 @@
             outY = 0;
             break;
 
+          case "left_fixed":
+            outX = -maxMove;
+            outY = 0;
+            break;
+
           case "left_snapback":
             if (nx < 0.52) {
               const t = nx / 0.52;
@@ -480,7 +470,7 @@
         rightEye.setAttribute("transform", `translate(${rightCenter.x + outX} ${rightCenter.y + outY})`);
       }
 
-      if (profile === "left_partial" || profile === "left_snapback") {
+      if (profile === "left_partial" || profile === "left_snapback" || profile === "left_fixed") {
         setEyePositions(0, 0.5);
       } else if (profile === "right_fixed") {
         setEyePositions(1, 0.5);
@@ -553,14 +543,14 @@
 
         if (currentPatient === "B") {
           const mmScale = 6;
-          const leftBase = 3 * mmScale;
-          const rightBase = 5 * mmScale;
+          const leftBase = 6 * mmScale;
+          const rightBase = 3 * mmScale;
 
-          // Patient B: anisocoria (R > L) with sluggish 2-second constriction.
-          const leftTarget = Math.max(2 * mmScale, leftBase - (leftNear * 7 + rightNear * 4));
-          const rightTarget = Math.max(4 * mmScale, rightBase - (rightNear * 7 + leftNear * 4));
+          // Patient B: left pupil is blown and dilated; right pupil is smaller and reacts normally.
+          const leftTarget = leftBase;
+          const rightTarget = Math.max(2 * mmScale, rightBase - (rightNear * 5 + leftNear * 3));
 
-          animatePupilRadius(leftTarget, rightTarget, 2000);
+          animatePupilRadius(leftTarget, rightTarget, 250);
         } else {
           // Patient A: normal direct and consensual response in both pupils.
           const leftRadius = 28 - (leftNear * 13 + rightNear * 10);
